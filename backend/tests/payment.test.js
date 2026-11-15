@@ -49,7 +49,7 @@ test('a forged webhook is rejected; a signed one confirms the booking exactly on
   assert.strictEqual(after.appointment.status, 'confirmed');
   assert.strictEqual(after.appointment.paymentStatus, 'paid');
   assert.strictEqual(after.position, 1);
-  assert.strictEqual(await redis.zCard(`queue:${doc.doctor._id}:${tomorrow()}`), 1);
+  assert.strictEqual(await redis.zcard(`queue:${doc.doctor._id}:${tomorrow()}`), 1);
   // The confirmation SMS is queued once.
   const { getQueue } = require('../src/shared/notify');
   assert.ok(await getQueue().getJob(`confirmed-${appt._id}`));
@@ -71,7 +71,7 @@ test('cancelling a paid booking refunds it and frees the queue spot', async () =
   await p.post('/api/v1/payments/test-pay', { appointmentId: appt._id });
   const r = await p.del(`/api/v1/appointments/${appt._id}`);
   assert.strictEqual(r.data.appointment.paymentStatus, 'refunded');
-  assert.strictEqual(await redis.zCard(`queue:${doc.doctor._id}:${tomorrow()}`), 0);
+  assert.strictEqual(await redis.zcard(`queue:${doc.doctor._id}:${tomorrow()}`), 0);
 });
 
 test('paying after the hold expired and the slot was re-sold gets refunded, not double-booked', async () => {

@@ -103,7 +103,7 @@ The API serves the built React app too, so the site and API share one origin. Th
 | SMS and email | Await Twilio inside the request | BullMQ queue and a separate worker | A slow or failing provider never delays or fails a booking. Repeated events are queued once (job id = event + appointment). |
 | Several API copies | Local Socket.io and rate-limit state | Socket.io Redis adapter, rate limit counted in Redis, WebSocket-only transport | An event from copy B reaches a patient on copy A. WebSocket-only means no sticky sessions. |
 | Sessions | One long-lived token | 15-minute access token + 7-day refresh token in httpOnly cookies, rotated on every use | A refresh token used twice means it was copied, so every session of that user ends. A token version on the user also ends sessions on ban or password change. |
-| Search pages | `skip(page × size)` | Cursor on `_id`, 60-second Redis cache | `skip` walks every skipped document. A few seconds of staleness is fine for search. |
+| Search pages | `skip(page × size)`, distance worked out in code | Cursor on the last result; "near me" uses `$geoNear`, sorted nearest-first across every page with a (distance, `_id`) cursor; 60-second Redis cache | `skip` walks every skipped document. MongoDB measures the distances itself. A few seconds of staleness is fine for search. |
 | Prescriptions | Upload a PDF to Cloudinary | Store the data; build the PDF on download | Nothing to upload or keep in sync. |
 
 Deliberate shortcuts are marked in the code with `ponytail:` comments that name the limit and how to lift it, for example "regex search, move to Atlas Search beyond thousands of doctors".

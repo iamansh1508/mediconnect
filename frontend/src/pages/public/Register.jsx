@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { post } from '../../lib/api'
+import { post, useAction } from '../../lib/api'
 import { homeFor, useAuth } from '../../lib/auth'
 import { Button, Card, Field } from '../../components/ui'
 
@@ -10,22 +9,13 @@ export default function Register() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [role, setRole] = useState('patient')
-  const [busy, setBusy] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const { user } = await post('/auth/register', { ...Object.fromEntries(new FormData(e.target)), role })
+  const register = useAction((form) => post('/auth/register', { ...form, role }), {
+    success: 'Account created. We emailed you a link to confirm your address.',
+    onSuccess: ({ user }) => {
       setUser(user)
-      toast.success('Account created. We emailed you a link to confirm your address.')
       navigate(role === 'doctor' ? '/doctor/profile' : params.get('next') || homeFor(user), { replace: true })
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
+    },
+  })
 
   return (
     <Card className="mx-auto max-w-md">
@@ -41,14 +31,14 @@ export default function Register() {
           ))}
         </div>
       </fieldset>
-      <form onSubmit={submit} className="mt-4 space-y-4">
+      <form onSubmit={(e) => { e.preventDefault(); register.mutate(Object.fromEntries(new FormData(e.target))) }} className="mt-4 space-y-4">
         <Field label="Full name" name="name" autoComplete="name" required minLength={2} />
         <Field label="Email" name="email" type="email" autoComplete="email" required />
         <Field label="Mobile number" name="phone" type="tel" inputMode="numeric" pattern="[6-9][0-9]{9}" required
           hint="10 digits, no +91. Queue alerts are sent here." />
         {role === 'doctor' && <Field label="Specialty" name="specialty" placeholder="e.g. Dermatology" required />}
         <Field label="Password" name="password" type="password" autoComplete="new-password" required minLength={8} hint="At least 8 characters." />
-        <Button type="submit" loading={busy} className="w-full">Create account</Button>
+        <Button type="submit" loading={register.isPending} className="w-full">Create account</Button>
       </form>
       {role === 'doctor' && (
         <p className="mt-4 text-xs text-gray-500">An admin checks every doctor before patients can find them.</p>

@@ -52,18 +52,10 @@ function errorHandler(err, req, res, next) {
   res.status(status).json({ message });
 }
 
-// Fixed-window limit counted in Redis, so every API copy shares the same count.
-const rateLimit = (name, max, windowSec) => async (req, res, next) => {
-  const redis = require('./redis');
-  const key = `rl:${name}:${req.ip}`;
-  const n = await redis.incr(key);
-  if (n === 1) await redis.expire(key, windowSec);
-  if (n > max) return next(new AppError(429, 'Too many attempts. Wait a few minutes and try again.'));
-  next();
-};
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // India-only app: dates and times are Indian Standard Time, whatever the server's clock zone.
 const nowIST = () => new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).slice(0, 16); // 'YYYY-MM-DD HH:mm'
 const todayIST = () => nowIST().slice(0, 10);
 
-module.exports = { AppError, objectId, validate, getCookie, requestLog, errorHandler, rateLimit, nowIST, todayIST };
+module.exports = { AppError, objectId, validate, getCookie, requestLog, errorHandler, escapeRegex, nowIST, todayIST };

@@ -13,7 +13,9 @@ export default function Schedule() {
   return (
     <Page title="Opening hours" subtitle="Patients can book any open slot in these hours. Booked visits stay booked if you change them.">
       <Query query={me}>
-        {({ doctor }) => (
+        {({ doctor }) => {
+          const upcoming = doctor.schedule.filter((d) => d.date >= todayIST())
+          return (
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <h2 className="font-semibold">Open a day</h2>
@@ -29,9 +31,9 @@ export default function Schedule() {
             </Card>
             <Card>
               <h2 className="font-semibold">Upcoming days</h2>
-              {doctor.schedule.filter((d) => d.date >= todayIST()).length === 0 ? <Empty>No days open yet.</Empty> : (
+              {upcoming.length === 0 ? <Empty>No days open yet.</Empty> : (
                 <ul className="mt-3 divide-y divide-gray-100">
-                  {doctor.schedule.filter((d) => d.date >= todayIST()).map((d) => (
+                  {upcoming.map((d) => (
                     <li key={d.date} className="flex items-center justify-between gap-2 py-2 text-sm">
                       <span>
                         <span className="font-medium">{day(d.date)}</span>
@@ -46,7 +48,8 @@ export default function Schedule() {
               )}
             </Card>
           </div>
-        )}
+          )
+        }}
       </Query>
     </Page>
   )

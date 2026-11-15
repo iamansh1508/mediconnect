@@ -6,10 +6,17 @@ const User = require('./User.model');
 const Doctor = require('../doctor/Doctor.model');
 const redis = require('../../shared/redis');
 const { notify } = require('../../shared/notify');
-const { AppError, validate, rateLimit, getCookie } = require('../../shared/http');
+const { AppError, validate, getCookie } = require('../../shared/http');
 const { hashPassword, checkPassword, issueTokens, clearTokens, requireUser, REFRESH_TTL } = require('../../shared/auth');
 
-const limit = rateLimit('auth', Number(process.env.AUTH_RATE_LIMIT || 20), 15 * 60);
+// 20 tries per IP per 15 minutes, counted in Redis so every API copy shares the count.
+const MAX_TRIES = Number(process.env.AUTH_RATE_LIMIT || 20);
+async function limit(req, res, next) {
+  const key = `rl:auth:${req.ip}`;
+  const n = await redis.incr(key);
+  if (n === 1) await redis.expire(key, 15 * 60);
+  next(n > MAX_TRIES ? new AppError(429, 'Too many attempts. Wait a few minutes and try again.') : undefined);
+}
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const appUrl = () => process.env.APP_URL || 'http://localhost:5173';
 const password = z.string().min(8, 'Use at least 8 characters').max(128);
@@ -63,7 +70,7 @@ router.post('/auth/refresh', async (req, res) => {
 
   // Each refresh token works once. Seeing it again means it was copied, so end every session.
   const key = `used_jti:${p.jti}`;
-  if ((await redis.set(key, '1', { NX: true, EX: REFRESH_TTL })) !== 'OK') {
+  if ((await redis.set(key, '1', 'EX', REFRESH_TTL, 'NX')) !== 'OK') {
     // ponytail: 10-second grace for two tabs refreshing at the same moment; shorten if that window worries you.
     const benign = REFRESH_TTL - (await redis.ttl(key)) <= 10;
     if (!benign) {
@@ -79,7 +86,7 @@ router.post('/auth/refresh', async (req, res) => {
 router.post('/auth/logout', async (req, res) => {
   try {
     const p = jwt.verify(getCookie(req.headers.cookie, 'refreshToken'), process.env.REFRESH_TOKEN_SECRET);
-    await redis.set(`used_jti:${p.jti}`, '1', { EX: REFRESH_TTL });
+    await redis.set(`used_jti:${p.jti}`, '1', 'EX', REFRESH_TTL);
   } catch { /* already expired or missing: nothing to revoke */ }
   clearTokens(res);
   res.json({ message: 'Logged out.' });

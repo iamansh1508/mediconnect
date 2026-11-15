@@ -19,7 +19,7 @@ async function start() {
   const mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
   await redis.connect();
-  await redis.flushDb();
+  await redis.flushdb();
   const app = require('../src/app');
   await Promise.all(mongoose.modelNames().map((n) => mongoose.model(n).init())); // wait for unique indexes
   const server = http.createServer(app);
@@ -31,7 +31,9 @@ async function start() {
     async stop() {
       await socket.close();
       await new Promise((r) => server.close(r));
+      const queueClient = await getQueue().client;
       await getQueue().close();
+      await queueClient.quit(); // BullMQ leaves connections it was handed open
       await redis.quit();
       await mongoose.disconnect();
       await mongod.stop();

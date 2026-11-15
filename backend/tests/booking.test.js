@@ -69,6 +69,8 @@ test('search finds approved doctors near a point, with distance, and pages by cu
   assert.ok(r.data.nextCursor);
   const next = await client(app.base).get(`/api/v1/doctors?lat=12.97&lng=77.6&radiusKm=5&limit=2&cursor=${r.data.nextCursor}`);
   const seen = new Set(r.data.doctors.map((d) => d._id));
-  assert.ok(next.data.doctors.every((d) => !seen.has(d._id)));
+  assert.ok(next.data.doctors.length && next.data.doctors.every((d) => !seen.has(d._id))); // test doctors share one spot: ties page by _id
+  const km = [...r.data.doctors, ...next.data.doctors].map((d) => d.distanceKm);
+  assert.deepStrictEqual(km, [...km].sort((a, b) => a - b)); // nearest-first across pages, not just within one
   assert.strictEqual((await client(app.base).get('/api/v1/doctors?lat=28.6&lng=77.2&radiusKm=5')).data.doctors.length, 0); // Delhi
 });

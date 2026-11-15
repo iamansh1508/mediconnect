@@ -18,7 +18,7 @@ const UserSchema = new Schema({
 
 UserSchema.set('toJSON', {
   transform: (doc, r) => {
-    for (const k of ['password', 'tokenVersion', 'emailToken', 'emailTokenExpiry', 'resetToken', 'resetTokenExpiry', '__v']) delete r[k];
+    for (const k of ['password', 'tokenVersion', '__v']) delete r[k]; // the token fields are never selected
     return r;
   },
 });

@@ -1,4 +1,5 @@
 const { Schema, model } = require('mongoose');
+const { AppError } = require('../../shared/http');
 
 const DoctorSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
@@ -25,5 +26,10 @@ const DoctorSchema = new Schema({
 
 DoctorSchema.index({ location: '2dsphere' });
 DoctorSchema.index({ status: 1, specialty: 1, rating: -1 });
+
+// The logged-in doctor's own profile.
+DoctorSchema.statics.mine = async function mine(user) {
+  return (await this.findOne({ userId: user._id })) ?? Promise.reject(new AppError(404, 'Doctor profile not found.'));
+};
 
 module.exports = model('Doctor', DoctorSchema);

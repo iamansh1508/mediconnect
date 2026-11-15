@@ -4,7 +4,7 @@ const User = require('../auth/User.model');
 const Doctor = require('../doctor/Doctor.model');
 const Appointment = require('../booking/Appointment.model');
 const { getQueue } = require('../../shared/notify');
-const { AppError, validate, todayIST } = require('../../shared/http');
+const { AppError, validate, escapeRegex, todayIST } = require('../../shared/http');
 const { requireRole } = require('../../shared/auth');
 
 router.use('/admin', requireRole('admin'));
@@ -47,7 +47,7 @@ router.patch('/admin/doctors/:id', validate(z.object({ status: z.enum(['approved
 router.get('/admin/users', validate(z.object({ q: z.string().trim().max(60).optional(), role: z.enum(['patient', 'doctor', 'admin']).optional() }), 'query'), async (req, res) => {
   const { q, role } = req.valid;
   const filter = role ? { role } : {};
-  if (q) filter.$or = [{ name: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }, { email: q.toLowerCase() }];
+  if (q) filter.$or = [{ name: new RegExp(escapeRegex(q), 'i') }, { email: q.toLowerCase() }];
   res.json({ users: await User.find(filter).sort({ createdAt: -1 }).limit(100) });
 });
 

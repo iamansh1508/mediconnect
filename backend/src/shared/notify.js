@@ -1,16 +1,9 @@
 const { Queue } = require('bullmq');
+const Redis = require('ioredis');
 const log = require('./log');
 
-// BullMQ brings its own Redis client (ioredis), which takes options rather than a URL.
-function connection() {
-  const u = new URL(process.env.REDIS_URL);
-  return {
-    host: u.hostname, port: Number(u.port) || 6379,
-    username: u.username || undefined, password: decodeURIComponent(u.password) || undefined,
-    db: Number(u.pathname.slice(1)) || 0,
-    ...(u.protocol === 'rediss:' ? { tls: {} } : {}),
-  };
-}
+// BullMQ needs its own connections, which wait out a Redis outage instead of failing commands.
+const connection = () => new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
 let queue;
 const getQueue = () => (queue ??= new Queue('notifications', { connection: connection() }));

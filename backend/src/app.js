@@ -13,7 +13,7 @@ app.use(express.json({ limit: '100kb' }));
 
 app.get('/health', async (req, res) => {
   const mongo = mongoose.connection.readyState === 1;
-  const cache = redis.isReady && (await redis.ping().catch(() => null)) === 'PONG';
+  const cache = redis.status === 'ready' && (await redis.ping().catch(() => null)) === 'PONG';
   res.status(mongo && cache ? 200 : 503).json({ mongo, redis: cache });
 });
 

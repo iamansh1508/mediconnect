@@ -9,21 +9,21 @@ const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5
 
 async function join(appt) {
   const k = key(appt.doctorId, appt.date);
-  await redis.zAdd(k, { score: minutes(appt.time), value: String(appt._id) });
+  await redis.zadd(k, minutes(appt.time), String(appt._id));
   await redis.expire(k, 3 * 86400);
 }
 
-const remove = (appt) => redis.zRem(key(appt.doctorId, appt.date), String(appt._id));
-const order = (doctorId, date) => redis.zRange(key(doctorId, date), 0, -1);
+const remove = (appt) => redis.zrem(key(appt.doctorId, appt.date), String(appt._id));
+const order = (doctorId, date) => redis.zrange(key(doctorId, date), 0, -1);
 
 async function position(appt) {
-  const rank = await redis.zRank(key(appt.doctorId, appt.date), String(appt._id));
+  const rank = await redis.zrank(key(appt.doctorId, appt.date), String(appt._id));
   return rank === null ? null : rank + 1;
 }
 
 async function popNext(doctorId, date) {
-  const top = await redis.zPopMin(key(doctorId, date));
-  return top?.value ?? null;
+  const [id] = await redis.zpopmin(key(doctorId, date));
+  return id ?? null;
 }
 
 // MongoDB is the record; Redis only holds the order. If Redis lost the set (restart without
@@ -34,4 +34,4 @@ async function ensure(doctorId, date) {
   for (const a of waiting) await join(a);
 }
 
-module.exports = { join, remove, order, position, popNext, ensure, key };
+module.exports = { join, remove, order, position, popNext, ensure };

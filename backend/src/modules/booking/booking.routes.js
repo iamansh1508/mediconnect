@@ -11,13 +11,12 @@ const { requireUser, requireRole } = require('../../shared/auth');
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm');
-const myDoctor = async (user) => (await Doctor.findOne({ userId: user._id })) ?? Promise.reject(new AppError(404, 'Doctor profile not found.'));
 
 // Loads an appointment the current user may see: their own as patient, or one with them as doctor.
 async function visibleAppointment(req) {
   const appt = await Appointment.findById(req.params.id);
   if (appt && String(appt.patientId) === req.user.id) return appt;
-  if (appt && req.user.role === 'doctor' && String(appt.doctorId) === String((await myDoctor(req.user))._id)) return appt;
+  if (appt && req.user.role === 'doctor' && String(appt.doctorId) === String((await Doctor.mine(req.user))._id)) return appt;
   throw new AppError(404, 'Appointment not found.');
 }
 
@@ -36,12 +35,12 @@ router.get('/appointments/my', requireRole('patient'), async (req, res) => {
 
 router.get('/appointments/:id', requireUser, async (req, res) => {
   const appt = await visibleAppointment(req);
-  await appt.populate([{ path: 'doctorId', select: 'name specialty clinicName address location' }, { path: 'patientId', select: 'name phone' }]);
   let position = null;
   if (appt.status === 'confirmed' && !appt.calledAt) {
-    await queue.ensure(appt.doctorId._id, appt.date);
-    position = await queue.position({ ...appt.toObject(), doctorId: appt.doctorId._id });
+    await queue.ensure(appt.doctorId, appt.date);
+    position = await queue.position(appt);
   }
+  await appt.populate([{ path: 'doctorId', select: 'name specialty clinicName address location' }, { path: 'patientId', select: 'name phone' }]);
   res.json({ appointment: appt, position, holdExpired: service.isExpiredHold(appt) });
 });
 
@@ -78,7 +77,7 @@ router.get('/appointments/:id/prescription.pdf', requireUser, async (req, res) =
 // ---- doctor ----
 
 router.get('/doctors/me/queue', requireRole('doctor'), async (req, res) => {
-  const doctor = await myDoctor(req.user);
+  const doctor = await Doctor.mine(req.user);
   const date = todayIST();
   await queue.ensure(doctor._id, date);
   const ids = await queue.order(doctor._id, date);
@@ -90,7 +89,7 @@ router.get('/doctors/me/queue', requireRole('doctor'), async (req, res) => {
 });
 
 router.post('/doctors/me/queue/next', requireRole('doctor'), async (req, res) => {
-  const doctor = await myDoctor(req.user);
+  const doctor = await Doctor.mine(req.user);
   res.json({ called: await service.callNext(doctor, todayIST(), req.id) });
 });
 

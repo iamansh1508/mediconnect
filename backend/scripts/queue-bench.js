@@ -15,15 +15,15 @@ const fmt = (ms) => `${ms.toFixed(3)} ms`;
   const key = 'bench:queue';
   await redis.del(key);
   for (let i = 0; i < N; i += 1000) {
-    await redis.zAdd(key, Array.from({ length: Math.min(1000, N - i) }, (_, j) => ({ score: i + j, value: `appt${i + j}` })));
+    await redis.zadd(key, ...Array.from({ length: Math.min(1000, N - i) }, (_, j) => [i + j, `appt${i + j}`]).flat());
   }
   const coll = mongoose.connection.collection('bench_queue');
   await coll.drop().catch(() => {});
   await coll.insertMany(Array.from({ length: N }, (_, i) => ({ doctorId: 1, position: i + 1 })));
   await coll.createIndex({ doctorId: 1, position: 1 });
 
-  const rank = await time((i) => redis.zRank(key, `appt${N - 1 - i}`));
-  const pop = await time(() => redis.zPopMin(key));
+  const rank = await time((i) => redis.zrank(key, `appt${N - 1 - i}`));
+  const pop = await time(() => redis.zpopmin(key));
   const docPos = await time((i) => coll.findOne({ doctorId: 1, position: N - i }));
   const docShift = await time(async () => { // call next = delete the first, then move everyone else up one
     await coll.deleteOne({ position: 1 });
