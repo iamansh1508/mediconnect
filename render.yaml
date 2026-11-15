@@ -1,0 +1,28 @@
+# One-click deploy on Render (Blueprint). MongoDB Atlas and Redis Cloud free tiers supply the databases:
+# paste their connection strings when Render asks. The worker runs inside the API process here, because
+# background workers are not on Render's free plan; docker-compose.yml shows the separate-worker setup.
+services:
+  - type: web
+    name: mediconnect
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: RUN_WORKER_IN_API
+        value: "true"
+      - key: APP_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false

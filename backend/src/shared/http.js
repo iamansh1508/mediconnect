@@ -28,7 +28,7 @@ const getCookie = (header, name) => {
   return m ? decodeURIComponent(m[1]) : null;
 };
 
-const host = os.hostname();
+const host = `${os.hostname()}#${process.pid}`; // which API copy answered
 function requestLog(req, res, next) {
   req.id = req.get('x-request-id') || crypto.randomUUID();
   res.set({ 'x-request-id': req.id, 'x-served-by': host, 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'same-origin' });
