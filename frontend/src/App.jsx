@@ -1,125 +1,85 @@
-import React from 'react'
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
-import { ProtectedRoute, RoleRoute } from './shared/components/auth'
-import Layout from './components/Layout/Layout.jsx'
+import { Navigate, Outlet, Route, Routes, useLocation, Link } from 'react-router-dom'
+import { homeFor, useAuth } from './lib/auth'
+import { Loading } from './components/ui'
+import Layout from './components/Layout'
+import Home from './pages/public/Home'
+import Login from './pages/public/Login'
+import Register from './pages/public/Register'
+import { ForgotPassword, ResetPassword, VerifyEmail } from './pages/public/AccountLinks'
+import Doctors from './pages/public/Doctors'
+import DoctorProfile from './pages/public/DoctorProfile'
+import Appointments from './pages/patient/Appointments'
+import AppointmentDetail from './pages/patient/AppointmentDetail'
+import Account from './pages/Account'
+import Dashboard from './pages/doctor/Dashboard'
+import Schedule from './pages/doctor/Schedule'
+import ClinicProfile from './pages/doctor/ClinicProfile'
+import PatientHistory from './pages/doctor/PatientHistory'
+import Overview from './pages/admin/Overview'
+import AdminDoctors from './pages/admin/Doctors'
+import Users from './pages/admin/Users'
+import Notifications from './pages/admin/Notifications'
 
-import { LoginPage, RegisterPage } from './modules/pages/auth'
-import PatientDashboardPage from './pages/patient/PatientDashboardPage.jsx'
-import { DoctorSearchPage } from './modules/pages/patient/DoctorSearchPage.jsx'
-import { DoctorDetailPage } from './modules/pages/patient/DoctorDetailPage.jsx'
-import { BookingPage } from './modules/pages/patient/BookingPage.jsx'
-import { AppointmentsPage } from './modules/pages/patient/AppointmentsPage.jsx'
-import { AppointmentDetailPage } from './modules/pages/patient/AppointmentDetailPage.jsx'
-import { PrescriptionPage } from './modules/pages/patient/PrescriptionPage.jsx'
-
-import { DoctorDashboardPage } from './modules/pages/doctor/DoctorDashboardPage.jsx'
-import { SchedulePage } from './modules/pages/doctor/SchedulePage.jsx'
-import { QueuePage } from './modules/pages/doctor/QueuePage.jsx'
-import { CreatePrescriptionPage } from './modules/pages/doctor/CreatePrescriptionPage.jsx'
-
-import AdminDashboardPage from './modules/pages/admin/AdminDashboardPage.jsx'
-import { PendingDoctorsPage } from './modules/pages/admin/PendingDoctorsPage.jsx'
-import ProfilePage from './modules/pages/profile/ProfilePage.jsx'
-
-function RoutePlaceholder({ title }) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-      <p className="mt-2 text-gray-600">This screen is not implemented yet.</p>
-    </div>
-  )
+function RequireRole({ roles }) {
+  const { user } = useAuth()
+  const location = useLocation()
+  if (user === undefined) return <Loading />
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />
+  if (!roles.includes(user.role)) return <Navigate to={homeFor(user)} replace />
+  return <Outlet />
 }
 
-function NotFoundPage() {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-      <h1 className="text-4xl font-bold text-gray-900">404</h1>
-      <p className="mt-2 text-gray-600">Page not found.</p>
-    </div>
-  )
+function GuestOnly() {
+  const { user } = useAuth()
+  if (user === undefined) return <Loading />
+  return user ? <Navigate to={homeFor(user)} replace /> : <Outlet />
 }
 
-function App() {
+const NotFound = () => (
+  <div className="py-20 text-center">
+    <h1 className="text-2xl font-semibold">Page not found</h1>
+    <Link to="/" className="mt-4 inline-block text-teal-700 underline">Go to the home page</Link>
+  </div>
+)
+
+export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="doctors" element={<Doctors />} />
+        <Route path="doctors/:id" element={<DoctorProfile />} />
+        <Route path="reset-password/:token" element={<ResetPassword />} />
+        <Route path="verify-email/:token" element={<VerifyEmail />} />
 
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<RoutePlaceholder title="Forgot Password" />} />
-        <Route
-          path="/verify-email/:verificationToken"
-          element={<RoutePlaceholder title="Verify Email" />}
-        />
-
-        <Route element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            <Route element={<RoleRoute requiredRole="patient" />}>
-              <Route path="/patient" element={<PatientDashboardPage />} />
-              <Route
-                path="/patient/profile"
-                element={<ProfilePage />}
-              />
-              <Route path="/patient/doctors" element={<DoctorSearchPage />} />
-              <Route path="/patient/doctors/:doctorId" element={<DoctorDetailPage />} />
-              <Route path="/patient/doctors/:doctorId/book" element={<BookingPage />} />
-              <Route path="/patient/appointments" element={<AppointmentsPage />} />
-              <Route
-                path="/patient/appointments/:appointmentId"
-                element={<AppointmentDetailPage />}
-              />
-              <Route
-                path="/patient/prescriptions/:prescriptionId"
-                element={<PrescriptionPage />}
-              />
-            </Route>
-
-            <Route element={<RoleRoute requiredRole="doctor" />}>
-              <Route path="/doctor" element={<DoctorDashboardPage />} />
-              <Route
-                path="/doctor/profile"
-                element={<ProfilePage />}
-              />
-              <Route path="/doctor/schedule" element={<SchedulePage />} />
-              <Route path="/doctor/queue" element={<QueuePage />} />
-              <Route
-                path="/doctor/patients/:patientId"
-                element={<RoutePlaceholder title="Patient History" />}
-              />
-              <Route
-                path="/doctor/prescriptions/new"
-                element={<CreatePrescriptionPage />}
-              />
-              <Route
-                path="/doctor/appointments/:appointmentId"
-                element={<RoutePlaceholder title="Doctor Appointment" />}
-              />
-            </Route>
-
-            <Route element={<RoleRoute requiredRole="admin" />}>
-              <Route path="/admin" element={<AdminDashboardPage />} />
-              <Route path="/admin/doctors/pending" element={<PendingDoctorsPage />} />
-              <Route
-                path="/admin/users"
-                element={<RoutePlaceholder title="User Management" />}
-              />
-              <Route
-                path="/admin/analytics"
-                element={<RoutePlaceholder title="Admin Analytics" />}
-              />
-              <Route
-                path="/admin/doctors/:doctorId"
-                element={<RoutePlaceholder title="Doctor Review" />}
-              />
-            </Route>
-          </Route>
+        <Route element={<GuestOnly />}>
+          <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
+          <Route path="forgot-password" element={<ForgotPassword />} />
         </Route>
 
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </BrowserRouter>
+        <Route element={<RequireRole roles={['patient', 'doctor', 'admin']} />}>
+          <Route path="profile" element={<Account />} />
+        </Route>
+        <Route element={<RequireRole roles={['patient']} />}>
+          <Route path="appointments" element={<Appointments />} />
+          <Route path="appointments/:id" element={<AppointmentDetail />} />
+        </Route>
+        <Route element={<RequireRole roles={['doctor']} />}>
+          <Route path="doctor" element={<Dashboard />} />
+          <Route path="doctor/schedule" element={<Schedule />} />
+          <Route path="doctor/profile" element={<ClinicProfile />} />
+          <Route path="doctor/patients/:patientId" element={<PatientHistory />} />
+        </Route>
+        <Route element={<RequireRole roles={['admin']} />}>
+          <Route path="admin" element={<Overview />} />
+          <Route path="admin/doctors" element={<AdminDoctors />} />
+          <Route path="admin/users" element={<Users />} />
+          <Route path="admin/notifications" element={<Notifications />} />
+        </Route>
+
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   )
 }
-
-export default App

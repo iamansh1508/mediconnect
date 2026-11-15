@@ -1,56 +1,31 @@
+const path = require('path');
 const express = require('express');
-const cookieParser = require('cookie-parser');
-const cors = require('cors');
+const mongoose = require('mongoose');
+const redis = require('./shared/redis');
+const { AppError, requestLog, errorHandler } = require('./shared/http');
+
 const app = express();
-const { AppError } = require('./shared/utils');
+app.set('trust proxy', 1); // one proxy in front (nginx or the host's load balancer), so req.ip is the real client
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost:5181',
-  'http://127.0.0.1:5181',
-].filter(Boolean);
+app.use(requestLog);
+app.use(require('./modules/payment/payment.routes').webhook); // needs the raw body: before express.json()
+app.use(express.json({ limit: '100kb' }));
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+app.get('/health', async (req, res) => {
+  const mongo = mongoose.connection.readyState === 1;
+  const cache = redis.status === 'ready' && (await redis.ping().catch(() => null)) === 'PONG';
+  res.status(mongo && cache ? 200 : 503).json({ mongo, redis: cache });
+});
 
-    return callback(new Error(`Origin ${origin} is not allowed by CORS`));
-  },
-  credentials: true,
-}));
-app.use(express.json());
-app.use(cookieParser());
-app.use(require('express-session')({
-  secret: process.env.SESSION_SECRET || 'fallback-session-secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production' },
-}));
-app.use(require('passport').initialize());
-app.use(require('passport').session());
+for (const m of ['auth', 'doctor', 'booking', 'payment', 'admin']) app.use('/api/v1', require(`./modules/${m}/${m}.routes`));
+app.use('/api', (req, res, next) => next(new AppError(404, 'Not found.')));
 
-// Explicit route imports - no fallbacks to expose startup errors
-const authRoutes = require('./modules/auth/auth.routes');
-const doctorRoutes = require('./modules/doctor/doctor.routes');
-const bookingRoutes = require('./modules/booking/booking.routes');
-const paymentRoutes = require('./modules/payment/payment.routes');
-const queueRoutes = require('./modules/booking/queue.routes');
-const adminRoutes = require('./modules/admin/admin.routes');
-const prescriptionRoutes = require('./modules/booking/prescription.routes');
+// The API also serves the built React app, so the site and API share one origin:
+// no CORS setup, and the login cookies stay first-party.
+const dist = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(dist, { index: false }));
+app.get('/{*path}', (req, res, next) => res.sendFile(path.join(dist, 'index.html'), (e) => e && next(new AppError(404, 'Not found.'))));
 
-// Mount routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/doctors', doctorRoutes);
-app.use('/api/v1/appointments', bookingRoutes);
-app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/queue', queueRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/prescriptions', prescriptionRoutes);
-
-// Centralized error handler from shared middleware
-const { errorHandler } = require('./shared/middleware');
 app.use(errorHandler);
 
 module.exports = app;
