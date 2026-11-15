@@ -195,6 +195,41 @@ const getCurrentUser = async (req, res) => {
   return res.status(200).json({ user: req.user });
 };
 
+const updateCurrentUser = async (req, res) => {
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  const { name, phone, profileImage } = req.body;
+  const updates = {};
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ message: 'name must be a non-empty string' });
+    }
+    updates.name = name.trim();
+  }
+
+  if (phone !== undefined) {
+    if (typeof phone !== 'string') {
+      return res.status(400).json({ message: 'phone must be a string' });
+    }
+    updates.phone = phone.trim();
+  }
+
+  if (profileImage !== undefined) {
+    if (typeof profileImage !== 'string') {
+      return res.status(400).json({ message: 'profileImage must be a string' });
+    }
+    updates.profileImage = profileImage.trim();
+  }
+
+  const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, {
+    new: true,
+    runValidators: true,
+  }).select('-password -refreshToken -emailVerificationToken -emailVerificationExpiry');
+
+  return res.status(200).json({ message: 'Profile updated', user });
+};
+
 const refreshAccessToken = async (req, res) => {
   try {
     const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
@@ -362,6 +397,25 @@ const resendEmailVerification = async (req, res) => {
   }
 };
 
+const googleCallback = asyncHandler(async (req, res) => {
+  const user = req.user;
+  if (!user) {
+    return res.status(400).json({ message: 'Google authentication failed' });
+  }
+
+  const tokens = await generateAccessAndRefreshTokens(user._id);
+
+  const loggedInUser = await User.findById(user._id).select('-password -refreshToken -emailVerificationToken -emailVerificationExpiry');
+
+  const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production' };
+
+  return res
+    .status(200)
+    .cookie('accessToken', tokens.accessToken, cookieOptions)
+    .cookie('refreshToken', tokens.refreshToken, cookieOptions)
+    .json({ message: 'Logged in with Google', user: loggedInUser, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+});
+
 // NEW: OTP Endpoints
 const sendOTP = async (req, res) => {
   try {
@@ -452,11 +506,13 @@ module.exports = {
   login: asyncHandler(login),
   logoutUser: asyncHandler(logoutUser),
   getCurrentUser: asyncHandler(getCurrentUser),
+  updateCurrentUser: asyncHandler(updateCurrentUser),
   refreshAccessToken: asyncHandler(refreshAccessToken),
   forgotPasswordRequest: asyncHandler(forgotPasswordRequest),
   resetForgotPassword: asyncHandler(resetForgotPassword),
   changeCurrentPassword: asyncHandler(changeCurrentPassword),
   verifyEmail: asyncHandler(verifyEmail),
+  googleCallback: asyncHandler(googleCallback),
   resendEmailVerification: asyncHandler(resendEmailVerification),
   sendOTP: asyncHandler(sendOTP),
   verifyOTP: asyncHandler(verifyOTP),

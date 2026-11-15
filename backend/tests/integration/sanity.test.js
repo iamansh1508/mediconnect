@@ -26,7 +26,50 @@ Module.prototype.require = function(id) {
           exists: async (key) => {
             return mockRedisStore.has(key) ? 1 : 0;
           },
-          eval: async () => 1
+          eval: async () => 1,
+          get: async (key) => mockRedisStore.get(key) || null,
+          del: async (key) => {
+            const existed = mockRedisStore.has(key);
+            mockRedisStore.delete(key);
+            return existed ? 1 : 0;
+          },
+          zAdd: async (key, members) => {
+            if (!mockRedisStore.has(key)) mockRedisStore.set(key, []);
+            const arr = mockRedisStore.get(key);
+            for (let i = 0; i < members.length; i = i + 1) {
+              const m = members[i];
+              arr.push({ score: m.score, value: m.value });
+            }
+            return members.length;
+          },
+          zRank: async (key, value) => {
+            const arr = mockRedisStore.get(key);
+            if (!arr) return null;
+            for (let i = 0; i < arr.length; i = i + 1) {
+              if (arr[i].value === value) return i;
+            }
+            return null;
+          },
+          zRange: async (key, start, end) => {
+            const arr = mockRedisStore.get(key);
+            if (!arr) return [];
+            const endIndex = end === -1 ? arr.length - 1 : end;
+            const out = [];
+            for (let i = start; i <= endIndex && i < arr.length; i = i + 1) out.push(arr[i].value);
+            return out;
+          },
+          zRem: async (key, value) => {
+            const arr = mockRedisStore.get(key);
+            if (!arr) return 0;
+            const newArr = [];
+            let removed = 0;
+            for (let i = 0; i < arr.length; i = i + 1) {
+              if (arr[i].value !== value) newArr.push(arr[i]); else removed = removed + 1;
+            }
+            mockRedisStore.set(key, newArr);
+            return removed;
+          },
+          expire: async () => 1
         };
       }
     };
@@ -59,10 +102,7 @@ async function request(method, path, body = null, token = null) {
       res.on('data', chunk => bodyData += chunk);
       res.on('end', () => {
         try {
-          resolve({
-            status: res.statusCode,
-            data: bodyData ? JSON.parse(bodyData) : null
-          });
+          resolve({ status: res.statusCode, data: bodyData ? JSON.parse(bodyData) : null });
         } catch (e) {
           resolve({ status: res.statusCode, data: bodyData });
         }
@@ -79,11 +119,8 @@ before(async () => {
   mongod = await MongoMemoryServer.create();
   MONGODB_URI = mongod.getUri();
   await mongoose.connect(MONGODB_URI);
-  
-  // Set up redis URL so it thinks it is configured
   process.env.REDIS_URL = 'redis://localhost:6379';
   await redisConfig.init();
-
   server = http.createServer(app);
   await new Promise(resolve => server.listen(PORT, resolve));
 });
@@ -92,8 +129,6 @@ after(async () => {
   await new Promise(resolve => server.close(resolve));
   await mongoose.disconnect();
   await mongod.stop();
-  
-  // Restore original require
   Module.prototype.require = originalRequire;
 });
 
@@ -160,7 +195,7 @@ test('Sanity check: Doctor and Patient registration/login, doctor search, bookin
     date: bookingDate.toISOString(),
     timeSlot: '10:00-10:30'
   }, patToken);
-  
+
   assert.strictEqual(bookingRes.status, 201, 'Appointment booking failed');
   assert.ok(bookingRes.data.appointment, 'Appointment data missing');
 });
@@ -211,10 +246,10 @@ test('P0 Fixes: Doctor static route ordering & empty location updates', async ()
     name: 'P0 Doctor',
     email: docEmail,
     username: `p0doc_${Date.now()}`,
-    password: 'Password123!',
+    password: 'CorrectPassword123!',
     role: 'doctor'
   });
-  const loginRes = await request('POST', '/api/v1/auth/login', { email: docEmail, password: 'Password123!' });
+  const loginRes = await request('POST', '/api/v1/auth/login', { email: docEmail, password: 'CorrectPassword123!' });
   const token = loginRes.data.accessToken;
 
   // 1. Doctor static route ordering (ensure /me, /profile, /patients don't trigger GET /:id 400 error)
@@ -266,7 +301,3 @@ test('P1 Quick Wins: Login status code 401 & bcrypt password verification', asyn
   });
   assert.strictEqual(correctPassRes.status, 200, 'Correct password login should return 200');
 });
-
-
-
-

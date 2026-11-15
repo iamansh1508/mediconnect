@@ -4,6 +4,9 @@ const crypto = require('crypto');
 let client = null;
 let ready = false;
 
+// In-memory fallback for locks when Redis is unavailable (dev/test)
+const fallbackLockStore = new Map();
+
 function isConfigured() {
   return !!process.env.REDIS_URL;
 }
@@ -25,30 +28,62 @@ async function init() {
   return client;
 }
 
+// Helper to clear fallback stores for testing/clean state
+function clearFallbackStores() {
+  fallbackLockStore.clear();
+  fallbackUsedJtiStore.clear();
+}
+
 // Acquire a simple lock: SET key value NX PX ttl
 async function acquireLock(key, ttl = 5000) {
-  if (!client) return null;
   const token = crypto.randomBytes(12).toString('hex');
-  try {
-    const res = await client.set(key, token, { NX: true, PX: ttl });
-    return res === 'OK' ? token : null;
-  } catch (e) {
-    console.warn('Redis acquireLock error', e && e.message);
-    return null;
+  const now = Date.now();
+  const expiry = now + ttl;
+
+  if (client) {
+    try {
+      const res = await client.set(key, token, { NX: true, PX: ttl });
+      return res === 'OK' ? token : null;
+    } catch (e) {
+      console.warn('Redis acquireLock error, falling back to memory', e && e.message);
+    }
   }
+
+  // In-memory fallback
+  const existing = fallbackLockStore.get(key);
+  if (existing && existing.expiry > now) {
+    return null; // Lock held
+  }
+  fallbackLockStore.set(key, { token, expiry });
+  // Clean up expired entry after TTL
+  setTimeout(() => {
+    const entry = fallbackLockStore.get(key);
+    if (entry && entry.token === token && entry.expiry <= Date.now()) {
+      fallbackLockStore.delete(key);
+    }
+  }, ttl + 100);
+  return token;
 }
 
 // Release lock only if token matches
 async function releaseLock(key, token) {
-  if (!client) return false;
-  const lua = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
-  try {
-    const res = await client.eval(lua, { keys: [key], arguments: [token] });
-    return res === 1;
-  } catch (e) {
-    console.warn('Redis releaseLock error', e && e.message);
-    return false;
+  if (client) {
+    const lua = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
+    try {
+      const res = await client.eval(lua, { keys: [key], arguments: [token] });
+      return res === 1;
+    } catch (e) {
+      console.warn('Redis releaseLock error, falling back to memory', e && e.message);
+    }
   }
+
+  // In-memory fallback
+  const entry = fallbackLockStore.get(key);
+  if (entry && entry.token === token) {
+    fallbackLockStore.delete(key);
+    return true;
+  }
+  return false;
 }
 
 // Token replay detection: store used refresh JTIs in Redis with TTL (in-memory fallback for dev)
@@ -102,5 +137,5 @@ module.exports = {
   getRefreshTokenTtlSeconds,
   isJtiUsed,
   markJtiUsed,
+  clearFallbackStores,
 };
-
