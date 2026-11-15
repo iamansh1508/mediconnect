@@ -67,6 +67,7 @@ async function markPaid(orderId, paymentId, requestId) {
     }
     return existing;
   }
+  await queue.ensure(appt.doctorId, appt.date); // rebuild first, or this patient would jump a queue Redis lost
   await queue.join(appt);
   await broadcastQueue(appt.doctorId, appt.date);
   const [patient, doctor] = await Promise.all([User.findById(appt.patientId), Doctor.findById(appt.doctorId)]);

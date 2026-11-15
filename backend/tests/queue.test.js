@@ -76,6 +76,15 @@ test('the queue rebuilds from MongoDB if Redis loses it', async () => {
   assert.strictEqual((await p.get(`/api/v1/appointments/${p.appointmentId}`)).data.position, 1);
 });
 
+test('paying after Redis lost the queue does not jump the patients already waiting', async () => {
+  const doc = await doctor(app.base);
+  const waiting = await paidToday(doc, '19:00');
+  await require('./helpers').redis.del(`queue:${doc.doctor._id}:${todayIST()}`);
+  const newcomer = await paidToday(doc, '19:30');
+  assert.strictEqual((await newcomer.get(`/api/v1/appointments/${newcomer.appointmentId}`)).data.position, 2);
+  assert.strictEqual((await waiting.get(`/api/v1/appointments/${waiting.appointmentId}`)).data.position, 1);
+});
+
 test('prescription, PDF download, and one review per visit', async () => {
   const doc = await doctor(app.base);
   const p = await paidToday(doc, '20:00');
