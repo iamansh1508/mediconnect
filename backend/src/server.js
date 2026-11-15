@@ -1,56 +1,24 @@
-require('dotenv').config();
+require('./env');
 const http = require('http');
-const app = require('./app');
 const mongoose = require('mongoose');
+const redis = require('./shared/redis');
+const socket = require('./shared/socket');
+const log = require('./shared/log');
+const app = require('./app');
 
-const PORT = process.env.PORT || 5000;
-let MONGODB_URI = process.env.MONGODB_URI;
-
-async function startServer() {
-  // Check email config early and warn
-  try {
-    const { checkEmailConfig } = require('./shared/email-config.check');
-    checkEmailConfig();
-  } catch (e) {
-    console.warn('Email config checker failed to run:', e && e.message);
-  }
-  try {
-    if (!MONGODB_URI || process.env.USE_INMEM === 'true') {
-      console.log('Starting in-memory MongoDB for tests...');
-      const { MongoMemoryServer } = require('mongodb-memory-server');
-      const mongod = await MongoMemoryServer.create();
-      MONGODB_URI = mongod.getUri();
-      console.log('In-memory MongoDB URI:', MONGODB_URI.replace(/:\/\/.+?:/, '://<hidden>:'));
-    }
-
-    await mongoose.connect(MONGODB_URI);
-    console.log('Connected to MongoDB');
-
-    const server = http.createServer(app);
-
-    // Initialize Redis client if configured (used for OTP, locks, queue)
-    try {
-      const redisConfig = require('./shared/config/redis');
-      if (redisConfig && typeof redisConfig.init === 'function' && process.env.REDIS_URL) {
-        redisConfig.init().catch((e) => console.warn('Redis init failed:', e && e.message));
-      }
-    } catch (e) {
-      console.warn('Failed to init redis module:', e && e.message);
-    }
-
-    // Initialize Socket.io (in-process). Gate Redis adapter if REDIS_URL set.
-    try {
-      const { configureSocket } = require('./shared/config/socket');
-      configureSocket(server, app);
-    } catch (e) {
-      console.warn('Socket.io failed to initialize:', e && e.message);
-    }
-
-    server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
-  } catch (err) {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1);
-  }
-}
-
-startServer();
+(async () => {
+  await Promise.all([mongoose.connect(process.env.MONGODB_URI), redis.connect()]);
+  const server = http.createServer(app);
+  await socket.attach(server);
+  // Small deployments can run the notification worker inside the API process instead of separately.
+  if (process.env.RUN_WORKER_IN_API === 'true') require('./worker');
+  const port = Number(process.env.PORT) || 5000;
+  server.listen(port, () => log.info('api listening', { port }));
+  // On deploy or scale-down, stop taking new connections and let in-flight requests finish.
+  const stop = () => server.close(() => process.exit(0));
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+})().catch((e) => {
+  log.error('startup failed', { err: e.message });
+  process.exit(1);
+});

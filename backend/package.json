@@ -1,38 +1,31 @@
 {
   "name": "mediconnect-backend",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "engines": { "node": ">=20.12" },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "smoke": "node scripts/smoke-integration.js",
-    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js"
+    "worker": "node src/worker.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node scripts/seed.js",
+    "race": "node scripts/race.js",
+    "bench:queue": "node scripts/queue-bench.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
-    "cloudinary": "^2.10.0",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bullmq": "^5.30.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.6.2",
-    "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
-    "mailgen": "^2.0.34",
     "mongoose": "^9.9.1",
     "nodemailer": "^9.0.3",
-    "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.19.1",
-    "razorpay": "^2.9.8",
     "redis": "^6.2.0",
     "socket.io": "^4.8.3",
-    "twilio": "^6.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.2.0",
-    "nodemon": "^3.1.14",
-    "supertest": "^7.2.2"
+    "socket.io-client": "^4.8.3"
   }
 }
