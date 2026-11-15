@@ -58,12 +58,14 @@ Patient on http://localhost:5001 received the update: now position 1 of 2
 - With bad Twilio credentials, the worker tries 5 times with growing delays, then moves the job to the failed set.
 - An admin presses Retry once Twilio works again, and the message is sent (attempt 6).
 
-**Tests:** 21 backend tests (`npm test`) against a real Redis and an in-memory MongoDB. They cover:
+**Tests:** 22 backend tests (`npm test`) against a real Redis and an in-memory MongoDB. They cover:
 - 50 concurrent bookings for one slot, and a duplicate inserted with the lock bypassed
 - cancel then re-book, and the 15-minute hold
 - forged and repeated webhooks, a tampered price, retried orders, and a payment that arrives after the slot was re-sold
-- separate queues per doctor, live updates over Socket.io, and refusing to let anyone watch someone else's queue
+- separate queues per doctor, live updates over Socket.io, refusing to let anyone watch someone else's queue, and rebuilding the queue after Redis loses it
 - refresh-token reuse, bans, password reset, and the prescription PDF
+
+**In a browser:** a Playwright run through nginx and both API copies took a new patient through search, booking, test-mode payment and the live queue (#4 to #3 to "It's your turn" without reloading), then the doctor's prescription, the PDF download and a review, and the admin's approve and suspend actions. It also checked that the doctor list has no sideways scrolling at phone width. This run isn't part of CI, because it needs the whole stack running.
 
 ## Architecture
 
@@ -181,8 +183,8 @@ backend/src
   shared/      auth (cookies, tokens, scrypt), http (errors, validation, logging, rate limit),
                redis (+ lock), socket, notify (queue + Twilio/SMTP senders), log
   modules/     auth · doctor · booking (appointments, queue, PDF) · payment (Razorpay) · admin
-backend/tests  21 tests     backend/scripts  seed, race, queue-bench, scale-check
-frontend/src   pages/{public,patient,doctor,admin}, components, lib (api, auth, socket)
+backend/tests  22 tests     backend/scripts  seed, race, queue-bench, scale-check
+frontend/src   pages/{public,patient,doctor,admin}, components (ui, layout, map), lib (api, auth, socket)
 ```
 
 ## Not built, on purpose
