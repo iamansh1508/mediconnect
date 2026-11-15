@@ -1,10 +1,11 @@
 // Demo data: 33 made-up doctors around Bengaluru, demo logins, and a live queue for today.
-// WIPES the database first. Usage: npm run seed  (refuses in production unless --force)
+// WIPES MongoDB and the app's Redis database first (so no cached search or old queue survives). Usage: npm run seed  (refuses in production unless --force)
 require('../src/env');
 const mongoose = require('mongoose');
 const User = require('../src/modules/auth/User.model');
 const Doctor = require('../src/modules/doctor/Doctor.model');
 const Appointment = require('../src/modules/booking/Appointment.model');
+const redis = require('../src/shared/redis');
 const { hashPassword } = require('../src/shared/auth');
 const { todayIST } = require('../src/shared/http');
 
@@ -33,8 +34,8 @@ const times = (from, to, step = 15) => {
 const week = () => Array.from({ length: 7 }, (_, i) => ({ date: day(i), slots: [...times(9, 13), ...times(17, 20)] }));
 
 (async () => {
-  await mongoose.connect(process.env.MONGODB_URI);
-  await mongoose.connection.dropDatabase();
+  await Promise.all([mongoose.connect(process.env.MONGODB_URI), redis.connect()]);
+  await Promise.all([mongoose.connection.dropDatabase(), redis.flushdb()]);
   await Promise.all([User, Doctor, Appointment].map((m) => m.init()));
   const password = await hashPassword('demo1234');
   const user = (fields) => User.create({ password, isEmailVerified: true, phone: `98${String(Math.floor(rand() * 1e8)).padStart(8, '0')}`, ...fields });
@@ -87,5 +88,5 @@ const week = () => Array.from({ length: 7 }, (_, i) => ({ date: day(i), slots: [
 
   console.log(`Seeded ${doctors.length} doctors (3 pending approval), ${others.length + 1} patients, and a queue of ${queue.length} for today.`);
   console.log('Logins (password demo1234): patient@mediconnect.demo, doctor@mediconnect.demo, admin@mediconnect.demo');
-  await mongoose.disconnect();
+  await Promise.all([mongoose.disconnect(), redis.quit()]);
 })().catch((e) => { console.error(e); process.exit(1); });
